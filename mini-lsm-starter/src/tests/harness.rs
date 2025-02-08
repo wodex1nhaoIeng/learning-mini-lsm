@@ -165,16 +165,6 @@ where
 {
     for (k, v) in expected {
         assert!(iter.is_valid());
-        println!(
-            "expected key: {:?}, actual key: {:?}",
-            k,
-            as_bytes(iter.key())
-        );
-        println!(
-            "expected value: {:?}, actual value: {:?}",
-            v,
-            as_bytes(iter.value())
-        );
         assert_eq!(
             k,
             iter.key(),

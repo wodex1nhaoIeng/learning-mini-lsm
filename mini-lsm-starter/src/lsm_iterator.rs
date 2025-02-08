@@ -67,7 +67,7 @@ impl<I: StorageIterator> FusedIterator<I> {
     pub fn new(mut iter: I) -> Self {
         // println!("{:?}", iter.is_valid());
         while iter.is_valid() && iter.value().is_empty() {
-            iter.next();
+            let e = iter.next();
         }
         Self {
             iter,

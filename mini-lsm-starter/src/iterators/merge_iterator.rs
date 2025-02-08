@@ -136,13 +136,6 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
             }
         }
 
-        // println!("current key: {:?}", current.1.key());
-        // println!("current value: {:?}", current.1.value());
-
-        // if current.1.value().is_empty() {
-        //     self.next()?;
-        // }
-
         Ok(())
     }
 }
