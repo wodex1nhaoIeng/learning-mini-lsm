@@ -17,9 +17,9 @@
 
 use std::sync::Arc;
 
-use crate::key::{KeySlice, KeyVec};
-
 use super::Block;
+use crate::key::{KeySlice, KeyVec};
+use bytes::Buf;
 
 /// Iterates on a block.
 pub struct BlockIterator {
@@ -48,22 +48,26 @@ impl BlockIterator {
 
     /// Creates a block iterator and seek to the first entry.
     pub fn create_and_seek_to_first(block: Arc<Block>) -> Self {
-        unimplemented!()
+        let mut iter: BlockIterator = Self::new(block);
+        iter.seek_to_first();
+        iter
     }
 
     /// Creates a block iterator and seek to the first key that >= `key`.
     pub fn create_and_seek_to_key(block: Arc<Block>, key: KeySlice) -> Self {
-        unimplemented!()
+        let mut iter: BlockIterator = Self::new(block);
+        iter.seek_to_key(key);
+        iter
     }
 
     /// Returns the key of the current entry.
     pub fn key(&self) -> KeySlice {
-        unimplemented!()
+        self.key.as_key_slice()
     }
 
     /// Returns the value of the current entry.
     pub fn value(&self) -> &[u8] {
-        unimplemented!()
+        &self.block.data[self.value_range.0..self.value_range.1]
     }
 
     /// Returns true if the iterator is valid.
@@ -72,20 +76,54 @@ impl BlockIterator {
         unimplemented!()
     }
 
+    pub fn seek_to_idx(&mut self, idx: usize) {
+        if idx >= self.block.offsets.len() {
+            self.key = KeyVec::new();
+            self.value_range = (0, 0);
+            self.idx = self.block.offsets.len();
+            return;
+        }
+
+        let start_pos = self.block.offsets[idx] as usize;
+
+        let key_len = (&self.block.data[start_pos..start_pos + 2]).get_u16() as usize;
+        let key = self.block.data[start_pos + 2..start_pos + 2 + key_len].to_vec();
+
+        let value_len = (&self.block.data[start_pos + 2 + key_len..start_pos + 2 + key_len + 2])
+            .get_u16() as usize;
+        let value_start = start_pos + 2 + key_len + 2;
+        let value_end = value_start + value_len;
+
+        self.key = KeyVec::from_vec(key);
+        self.value_range = (value_start, value_end);
+        self.idx = idx;
+    }
+
     /// Seeks to the first key in the block.
     pub fn seek_to_first(&mut self) {
-        unimplemented!()
+        self.seek_to_idx(0);
     }
 
     /// Move to the next key in the block.
     pub fn next(&mut self) {
-        unimplemented!()
+        self.seek_to_idx(self.idx + 1);
     }
 
     /// Seek to the first key that >= `key`.
     /// Note: You should assume the key-value pairs in the block are sorted when being added by
     /// callers.
     pub fn seek_to_key(&mut self, key: KeySlice) {
-        unimplemented!()
+        let mut left = 0;
+        let mut right = self.block.offsets.len() - 1;
+        while left < right {
+            let mid = (left + right) / 2;
+            self.seek_to_idx(mid);
+            if self.key().cmp(&key) == std::cmp::Ordering::Less {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        self.seek_to_idx(left);
     }
 }
