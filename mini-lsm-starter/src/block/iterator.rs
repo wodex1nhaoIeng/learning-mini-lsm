@@ -55,6 +55,7 @@ impl BlockIterator {
 
     /// Creates a block iterator and seek to the first key that >= `key`.
     pub fn create_and_seek_to_key(block: Arc<Block>, key: KeySlice) -> Self {
+        // println!("{:?}", key);
         let mut iter: BlockIterator = Self::new(block);
         iter.seek_to_key(key);
         iter
@@ -73,7 +74,7 @@ impl BlockIterator {
     /// Returns true if the iterator is valid.
     /// Note: You may want to make use of `key`
     pub fn is_valid(&self) -> bool {
-        unimplemented!()
+        !self.key.is_empty()
     }
 
     pub fn seek_to_idx(&mut self, idx: usize) {
@@ -114,11 +115,12 @@ impl BlockIterator {
     /// callers.
     pub fn seek_to_key(&mut self, key: KeySlice) {
         let mut left = 0;
-        let mut right = self.block.offsets.len() - 1;
+        let mut right = self.block.offsets.len();
+        //right is len, not len - 1 because maybe there is no specific key bigger than key
         while left < right {
             let mid = (left + right) / 2;
             self.seek_to_idx(mid);
-            if self.key().cmp(&key) == std::cmp::Ordering::Less {
+            if self.key() < key {
                 left = mid + 1;
             } else {
                 right = mid;
