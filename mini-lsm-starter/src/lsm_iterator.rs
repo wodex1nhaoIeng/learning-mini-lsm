@@ -16,21 +16,40 @@
 #![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
 
 use crate::{
-    iterators::{merge_iterator::MergeIterator, StorageIterator},
+    iterators::{
+        merge_iterator::MergeIterator, two_merge_iterator::TwoMergeIterator, StorageIterator,
+    },
     mem_table::MemTableIterator,
+    table::SsTableIterator,
 };
 use anyhow::Result;
+use bytes::Bytes;
+use std::ops::Bound;
 
 /// Represents the internal type for an LSM iterator. This type will be changed across the course for multiple times.
-type LsmIteratorInner = MergeIterator<MemTableIterator>;
+type LsmIteratorInner =
+    TwoMergeIterator<MergeIterator<MemTableIterator>, MergeIterator<SsTableIterator>>;
 
 pub struct LsmIterator {
     inner: LsmIteratorInner,
+    end_bound: Bound<Bytes>,
 }
 
 impl LsmIterator {
-    pub(crate) fn new(iter: LsmIteratorInner) -> Result<Self> {
-        Ok(Self { inner: iter })
+    pub(crate) fn new(iter: LsmIteratorInner, end_bound: Bound<Bytes>) -> Result<Self> {
+        let mut iter = Self {
+            inner: iter,
+            end_bound,
+        };
+        iter.skip_deleted()?;
+        Ok(iter)
+    }
+
+    fn skip_deleted(&mut self) -> Result<()> {
+        while self.inner.is_valid() && self.inner.value().is_empty() {
+            self.inner.next()?;
+        }
+        Ok(())
     }
 }
 
@@ -38,7 +57,17 @@ impl StorageIterator for LsmIterator {
     type KeyType<'a> = &'a [u8];
 
     fn is_valid(&self) -> bool {
-        self.inner.is_valid()
+        let mut if_key_out_of_bound = false;
+        match self.end_bound {
+            Bound::Included(ref x) => {
+                if_key_out_of_bound = !(self.inner.is_valid() && self.inner.key().raw_ref() <= x);
+            }
+            Bound::Excluded(ref x) => {
+                if_key_out_of_bound = !(self.inner.is_valid() && self.inner.key().raw_ref() < x);
+            }
+            Bound::Unbounded => {}
+        }
+        self.inner.is_valid() && !if_key_out_of_bound
     }
 
     fn key(&self) -> &[u8] {
@@ -51,7 +80,9 @@ impl StorageIterator for LsmIterator {
     }
 
     fn next(&mut self) -> Result<()> {
-        self.inner.next()
+        self.inner.next()?;
+        self.skip_deleted()?;
+        Ok(())
     }
 }
 
@@ -104,14 +135,12 @@ impl<I: StorageIterator> StorageIterator for FusedIterator<I> {
         if self.has_errored {
             return Err(anyhow::anyhow!("Iterator has errored"));
         }
-        let result = self.iter.next();
-        if result.is_err() {
-            self.has_errored = true;
-        } else {
-            if self.iter.is_valid() && self.value().is_empty() {
-                self.next()?;
+        if self.is_valid() {
+            if let Err(e) = self.iter.next() {
+                self.has_errored = true;
+                return Err(e);
             }
         }
-        result
+        Ok(())
     }
 }
