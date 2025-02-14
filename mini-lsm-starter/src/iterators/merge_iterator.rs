@@ -69,6 +69,15 @@ impl<I: StorageIterator> MergeIterator<I> {
 
         let mut heap = BinaryHeap::new();
 
+        if iters.iter().all(|x| !x.is_valid()) {
+            // All invalid, select the last one as the current.
+            let mut iters = iters;
+            return Self {
+                iters: heap,
+                current: Some(HeapWrapper(0, iters.pop().unwrap())),
+            };
+        }
+
         for (idx, iter) in iters.into_iter().enumerate() {
             if iter.is_valid() {
                 heap.push(HeapWrapper(idx, iter));
@@ -137,5 +146,17 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
         }
 
         Ok(())
+    }
+
+    fn num_active_iterators(&self) -> usize {
+        self.iters
+            .iter()
+            .map(|x| x.1.num_active_iterators())
+            .sum::<usize>()
+            + self
+                .current
+                .as_ref()
+                .map(|x| x.1.num_active_iterators())
+                .unwrap_or(0)
     }
 }

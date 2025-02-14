@@ -67,7 +67,7 @@ impl BlockBuilder {
         self.data.put_u16(value.len() as u16);
         self.data.put(value);
 
-        return true;
+        true
     }
 
     /// Check if there is no key-value pair in the block.

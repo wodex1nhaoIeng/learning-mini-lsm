@@ -100,4 +100,7 @@ impl<
         // println!("self.choose_a:: {:?}", self.choose_a);
         Ok(())
     }
+    fn num_active_iterators(&self) -> usize {
+        self.a.num_active_iterators() + self.b.num_active_iterators()
+    }
 }

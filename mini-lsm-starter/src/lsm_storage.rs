@@ -32,7 +32,7 @@ use crate::compact::{
 };
 use crate::iterators::merge_iterator::MergeIterator;
 use crate::iterators::{two_merge_iterator::TwoMergeIterator, StorageIterator};
-use crate::key;
+use crate::key::{self, KeyBytes, KeySlice};
 use crate::lsm_iterator::{FusedIterator, LsmIterator};
 use crate::manifest::Manifest;
 use crate::mem_table::map_bound;
@@ -321,6 +321,12 @@ impl LsmStorageInner {
 
         for sstable in snap_shot.l0_sstables.iter() {
             let sstable = snap_shot.sstables.get(sstable).unwrap();
+            if _key < sstable.first_key().raw_ref() {
+                continue;
+            }
+            if _key > sstable.last_key().raw_ref() {
+                continue;
+            }
             let iter = SsTableIterator::create_and_seek_to_key(
                 sstable.clone(),
                 key::KeySlice::from_slice(_key),
@@ -439,6 +445,33 @@ impl LsmStorageInner {
         Ok(())
     }
 
+    fn range_overlap(
+        user_begin: Bound<&[u8]>,
+        user_end: Bound<&[u8]>,
+        table_begin: &KeyBytes,
+        table_end: &KeyBytes,
+    ) -> bool {
+        match user_end {
+            Bound::Excluded(key) if key <= table_begin.raw_ref() => {
+                return false;
+            }
+            Bound::Included(key) if key < table_begin.raw_ref() => {
+                return false;
+            }
+            _ => {}
+        }
+        match user_begin {
+            Bound::Excluded(key) if key >= table_end.raw_ref() => {
+                return false;
+            }
+            Bound::Included(key) if key > table_end.raw_ref() => {
+                return false;
+            }
+            _ => {}
+        }
+        true
+    }
+
     /// Create an iterator over a range of keys.
     pub fn scan(
         &self,
@@ -458,26 +491,28 @@ impl LsmStorageInner {
         let memtable_iter = MergeIterator::create(memtable_iters);
 
         let mut table_iters = Vec::with_capacity(snapshot.l0_sstables.len());
-        for table in snapshot.l0_sstables.iter() {
-            let table = snapshot.sstables.get(table).unwrap().clone();
-            let iter = match _lower {
-                Bound::Included(key) => {
-                    SsTableIterator::create_and_seek_to_key(table, key::KeySlice::from_slice(key))?
-                }
-                Bound::Excluded(key) => {
-                    let mut iter = SsTableIterator::create_and_seek_to_key(
-                        table,
-                        key::KeySlice::from_slice(key),
-                    )?;
-                    if iter.is_valid() && iter.key() == key::KeySlice::from_slice(key) {
-                        iter.next()?;
+        for table_id in snapshot.l0_sstables.iter() {
+            let table = snapshot.sstables[table_id].clone();
+            if Self::range_overlap(_lower, _upper, table.first_key(), table.last_key()) {
+                let iter = match _lower {
+                    Bound::Included(key) => {
+                        SsTableIterator::create_and_seek_to_key(table, KeySlice::from_slice(key))?
                     }
-                    iter
-                }
-                Bound::Unbounded => SsTableIterator::create_and_seek_to_first(table)?,
-            };
+                    Bound::Excluded(key) => {
+                        let mut iter = SsTableIterator::create_and_seek_to_key(
+                            table,
+                            KeySlice::from_slice(key),
+                        )?;
+                        if iter.is_valid() && iter.key() == KeySlice::from_slice(key) {
+                            iter.next()?;
+                        }
+                        iter
+                    }
+                    Bound::Unbounded => SsTableIterator::create_and_seek_to_first(table)?,
+                };
 
-            table_iters.push(Box::new(iter));
+                table_iters.push(Box::new(iter));
+            }
         }
         let table_iter = MergeIterator::create(table_iters);
 
