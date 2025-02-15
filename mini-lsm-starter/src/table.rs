@@ -129,6 +129,7 @@ pub struct SsTable {
     first_key: KeyBytes,
     last_key: KeyBytes,
     pub(crate) bloom: Option<Bloom>,
+    pub(crate) bloom_offset: usize,
     /// The maximum timestamp stored in this SST, implemented in week 3.
     max_ts: u64,
 }
@@ -142,13 +143,20 @@ impl SsTable {
     /// Open SSTable from a file.
     pub fn open(id: usize, block_cache: Option<Arc<BlockCache>>, file: FileObject) -> Result<Self> {
         let file_size = file.size();
-        let raw_meta_block_offset = file.read(file_size - 4, 4)?;
+
+        let raw_bloom_offset = file.read(file_size - 4, 4)?;
+        let bloom_offset = (&raw_bloom_offset[..]).get_u32() as u64;
+        let bloom_section_size = file_size - bloom_offset as u64 - 4;
+
+        let raw_bloom_data = file.read(bloom_offset, bloom_section_size)?;
+        let bloom = Bloom::decode(&mut raw_bloom_data.as_slice())?;
+
+        let raw_meta_block_offset = file.read(bloom_offset - 4, 4)?;
         let meta_block_offset = (&raw_meta_block_offset[..]).get_u32() as u64;
-        let meta_section_size = file_size - meta_block_offset as u64 - 4;
+        let meta_section_size = bloom_offset - meta_block_offset as u64 - 4;
 
         let raw_meta_data = file.read(meta_block_offset, meta_section_size)?;
         let meta_data = BlockMeta::decode_block_meta(&mut raw_meta_data.as_slice());
-
         Ok(SsTable {
             file,
             block_meta_offset: meta_block_offset as usize,
@@ -156,7 +164,8 @@ impl SsTable {
             block_cache,
             first_key: meta_data.first().unwrap().first_key.clone(),
             last_key: meta_data.last().unwrap().last_key.clone(),
-            bloom: None,
+            bloom: Some(bloom),
+            bloom_offset: bloom_offset as usize,
             block_meta: meta_data,
             max_ts: 0,
         })
@@ -178,6 +187,7 @@ impl SsTable {
             first_key,
             last_key,
             bloom: None,
+            bloom_offset: 0,
             max_ts: 0,
         }
     }

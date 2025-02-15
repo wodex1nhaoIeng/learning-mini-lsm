@@ -63,4 +63,12 @@ impl Block {
             offsets: offsets,
         }
     }
+
+    fn get_first_key(&self) -> Vec<u8> {
+        let mut buf = &self.data[..];
+        buf.get_u16();
+        let key_len = buf.get_u16();
+        let key = &buf[..key_len as usize];
+        key.to_vec()
+    }
 }

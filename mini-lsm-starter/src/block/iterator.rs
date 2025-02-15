@@ -17,7 +17,7 @@
 
 use std::sync::Arc;
 
-use super::Block;
+use super::{Block, U16_SIZE};
 use crate::key::{KeySlice, KeyVec};
 use bytes::Buf;
 
@@ -38,11 +38,11 @@ pub struct BlockIterator {
 impl BlockIterator {
     fn new(block: Arc<Block>) -> Self {
         Self {
+            first_key: KeyVec::from_vec(block.get_first_key()),
             block,
             key: KeyVec::new(),
             value_range: (0, 0),
             idx: 0,
-            first_key: KeyVec::new(),
         }
     }
 
@@ -86,17 +86,20 @@ impl BlockIterator {
         }
 
         let start_pos = self.block.offsets[idx] as usize;
+        let mut entry = &self.block.data[start_pos..];
 
-        let key_len = (&self.block.data[start_pos..start_pos + 2]).get_u16() as usize;
-        let key = self.block.data[start_pos + 2..start_pos + 2 + key_len].to_vec();
-
-        let value_len = (&self.block.data[start_pos + 2 + key_len..start_pos + 2 + key_len + 2])
-            .get_u16() as usize;
-        let value_start = start_pos + 2 + key_len + 2;
-        let value_end = value_start + value_len;
-
-        self.key = KeyVec::from_vec(key);
-        self.value_range = (value_start, value_end);
+        let overlap_len = entry.get_u16() as usize;
+        let key_len = entry.get_u16() as usize;
+        let key = entry[..key_len].to_vec();
+        entry.advance(key_len);
+        let value_len = entry.get_u16() as usize;
+        let value_offset_begin = start_pos + U16_SIZE + U16_SIZE + key_len + U16_SIZE;
+        let value_offset_end = value_offset_begin + value_len;
+        // println!("first_key = {:?}", self.first_key);
+        let mut overlap_key = self.first_key.raw_ref()[..overlap_len].to_vec();
+        overlap_key.extend(key);
+        self.key = KeyVec::from_vec(overlap_key);
+        self.value_range = (value_offset_begin, value_offset_end);
         self.idx = idx;
     }
 

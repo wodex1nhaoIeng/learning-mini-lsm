@@ -22,7 +22,9 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use anyhow::{Ok, Result};
+use bytes::Buf;
 use bytes::Bytes;
+use farmhash::fingerprint32;
 use parking_lot::{Mutex, MutexGuard, RwLock};
 
 use crate::block::Block;
@@ -321,12 +323,19 @@ impl LsmStorageInner {
 
         for sstable in snap_shot.l0_sstables.iter() {
             let sstable = snap_shot.sstables.get(sstable).unwrap();
+
             if _key < sstable.first_key().raw_ref() {
                 continue;
             }
             if _key > sstable.last_key().raw_ref() {
                 continue;
             }
+            if let Some(bloom) = &sstable.bloom {
+                if !bloom.may_contain(fingerprint32(_key)) {
+                    continue;
+                }
+            }
+            // let file = sstable.file.read(offset, len)
             let iter = SsTableIterator::create_and_seek_to_key(
                 sstable.clone(),
                 key::KeySlice::from_slice(_key),
@@ -364,17 +373,7 @@ impl LsmStorageInner {
 
     /// Remove a key from the storage by writing an empty value.
     pub fn delete(&self, _key: &[u8]) -> Result<()> {
-        let fake_write_guard = self.state.read();
-        fake_write_guard.memtable.put(_key, b"")?;
-        let size = fake_write_guard.memtable.approximate_size();
-        drop(fake_write_guard);
-        if size >= self.options.target_sst_size {
-            let state_lock = self.state_lock.lock();
-            if self.state.read().memtable.approximate_size() >= self.options.target_sst_size {
-                self.force_freeze_memtable(&state_lock)?;
-            }
-        }
-        Ok(())
+        self.put(_key, b"")
     }
 
     pub(crate) fn path_of_sst_static(path: impl AsRef<Path>, id: usize) -> PathBuf {

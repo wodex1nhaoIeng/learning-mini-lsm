@@ -94,6 +94,15 @@ impl Bloom {
         filter.resize(nbytes, 0);
 
         // TODO: build the bloom filter
+        for i in keys {
+            let mut h = *i;
+            let delta = (h >> 17) | (h << 15);
+            for j in 0..k {
+                let bitpos = (h as usize) % nbits;
+                filter.set_bit(bitpos, true);
+                h = h.wrapping_add(delta);
+            }
+        }
 
         Self {
             filter: filter.freeze(),
@@ -102,15 +111,21 @@ impl Bloom {
     }
 
     /// Check if a bloom filter may contain some data
-    pub fn may_contain(&self, h: u32) -> bool {
+    pub fn may_contain(&self, mut h: u32) -> bool {
         if self.k > 30 {
             // potential new encoding for short bloom filters
             true
         } else {
             let nbits = self.filter.bit_len();
-            let delta = h.rotate_left(15);
+            let delta = (h >> 17) | (h << 15);
 
-            // TODO: probe the bloom filter
+            for _ in 0..self.k {
+                let bitpos = (h as usize) % nbits;
+                if !self.filter.get_bit(bitpos) {
+                    return false;
+                }
+                h = h.wrapping_add(delta);
+            }
 
             true
         }
