@@ -17,7 +17,8 @@
 
 use crate::{
     iterators::{
-        merge_iterator::MergeIterator, two_merge_iterator::TwoMergeIterator, StorageIterator,
+        concat_iterator::SstConcatIterator, merge_iterator::MergeIterator,
+        two_merge_iterator::TwoMergeIterator, StorageIterator,
     },
     mem_table::MemTableIterator,
     table::SsTableIterator,
@@ -27,8 +28,10 @@ use bytes::Bytes;
 use std::ops::Bound;
 
 /// Represents the internal type for an LSM iterator. This type will be changed across the course for multiple times.
-type LsmIteratorInner =
-    TwoMergeIterator<MergeIterator<MemTableIterator>, MergeIterator<SsTableIterator>>;
+type LsmIteratorInner = TwoMergeIterator<
+    TwoMergeIterator<MergeIterator<MemTableIterator>, MergeIterator<SsTableIterator>>,
+    SstConcatIterator,
+>;
 
 pub struct LsmIterator {
     inner: LsmIteratorInner,

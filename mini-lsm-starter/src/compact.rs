@@ -20,7 +20,6 @@ mod simple_leveled;
 mod tiered;
 
 use std::collections::HashSet;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 

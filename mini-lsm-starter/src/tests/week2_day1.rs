@@ -192,6 +192,8 @@ fn test_task2_concat_iterator() {
             assert!(!iter.is_valid());
         } else {
             assert!(iter.is_valid());
+            // println!("{:?}", iter.key().for_testing_key_ref());
+            // println!("{:?}", format!("{:05}", key).as_bytes());
             assert_eq!(
                 iter.key().for_testing_key_ref(),
                 format!("{:05}", key).as_bytes()
