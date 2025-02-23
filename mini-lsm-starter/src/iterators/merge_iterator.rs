@@ -21,7 +21,7 @@ use std::collections::BinaryHeap;
 
 use anyhow::Result;
 
-use crate::key::KeySlice;
+use crate::key::{KeySlice, KeyVec};
 
 use super::StorageIterator;
 
@@ -55,7 +55,6 @@ impl<I: StorageIterator> Ord for HeapWrapper<I> {
 /// iterators, prefer the one with smaller index.
 pub struct MergeIterator<I: StorageIterator> {
     iters: BinaryHeap<HeapWrapper<I>>,
-    current: Option<HeapWrapper<I>>,
 }
 
 impl<I: StorageIterator> MergeIterator<I> {
@@ -63,7 +62,6 @@ impl<I: StorageIterator> MergeIterator<I> {
         if iters.is_empty() {
             return Self {
                 iters: BinaryHeap::new(),
-                current: None,
             };
         }
 
@@ -71,11 +69,7 @@ impl<I: StorageIterator> MergeIterator<I> {
 
         if iters.iter().all(|x| !x.is_valid()) {
             // All invalid, select the last one as the current.
-            let mut iters = iters;
-            return Self {
-                iters: heap,
-                current: Some(HeapWrapper(0, iters.pop().unwrap())),
-            };
+            return Self { iters: heap };
         }
 
         for (idx, iter) in iters.into_iter().enumerate() {
@@ -84,11 +78,7 @@ impl<I: StorageIterator> MergeIterator<I> {
             }
         }
 
-        let current = heap.pop().unwrap();
-        Self {
-            iters: heap,
-            current: Some(current),
-        }
+        Self { iters: heap }
     }
 }
 
@@ -98,25 +88,31 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
     type KeyType<'a> = KeySlice<'a>;
 
     fn key(&self) -> KeySlice {
-        self.current.as_ref().unwrap().1.key()
+        self.iters.peek().as_ref().unwrap().1.key()
     }
 
     fn value(&self) -> &[u8] {
-        self.current.as_ref().unwrap().1.value()
+        // self.current.as_ref().unwrap().1.value()
+        self.iters.peek().as_ref().unwrap().1.value()
     }
 
     fn is_valid(&self) -> bool {
-        self.current
+        self.iters
+            .peek()
             .as_ref()
             .map(|x| x.1.is_valid())
             .unwrap_or(false)
     }
 
     fn next(&mut self) -> Result<()> {
-        let current = self.current.as_mut().unwrap();
-        // Pop the item out of the heap if they have the same value.
+        let mut current_key = KeyVec::new();
+
+        if let Some(inner_iter) = self.iters.peek_mut() {
+            current_key = inner_iter.1.key().to_key_vec();
+        }
+
         while let Some(mut inner_iter) = self.iters.peek_mut() {
-            if inner_iter.1.key() == current.1.key() {
+            if inner_iter.1.key() == current_key.as_key_slice() {
                 if let e @ Err(_) = inner_iter.1.next() {
                     PeekMut::pop(inner_iter);
                     return e;
@@ -130,21 +126,6 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
             }
         }
 
-        current.1.next()?;
-
-        if !current.1.is_valid() {
-            if let Some(iter) = self.iters.pop() {
-                *current = iter;
-            }
-            return Ok(());
-        }
-
-        if let Some(mut inner_iter) = self.iters.peek_mut() {
-            if current < &mut *inner_iter {
-                std::mem::swap(&mut *inner_iter, current);
-            }
-        }
-
         Ok(())
     }
 
@@ -153,10 +134,5 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
             .iter()
             .map(|x| x.1.num_active_iterators())
             .sum::<usize>()
-            + self
-                .current
-                .as_ref()
-                .map(|x| x.1.num_active_iterators())
-                .unwrap_or(0)
     }
 }
