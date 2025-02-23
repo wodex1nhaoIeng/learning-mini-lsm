@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 use crate::lsm_storage::LsmStorageState;
 
@@ -49,6 +50,8 @@ impl SimpleLeveledCompactionController {
         &self,
         _snapshot: &LsmStorageState,
     ) -> Option<SimpleLeveledCompactionTask> {
+        // println!("233 {:?}", _snapshot.l0_sstables.len());
+
         let mut levels = Vec::new();
         levels.push(_snapshot.l0_sstables.len());
 
@@ -61,7 +64,7 @@ impl SimpleLeveledCompactionController {
                 if levels[i] >= self.options.level0_file_num_compaction_trigger {
                     return Some(SimpleLeveledCompactionTask {
                         upper_level: None,
-                        upper_level_sst_ids: Vec::new(),
+                        upper_level_sst_ids: _snapshot.l0_sstables.clone(),
                         lower_level: i + 1,
                         lower_level_sst_ids: _snapshot.levels[i].1.clone(),
                         is_lower_level_bottom_level: i + 1 == self.options.max_levels,
@@ -81,7 +84,6 @@ impl SimpleLeveledCompactionController {
             }
         }
         None
-        // unimplemented!()
     }
 
     /// Apply the compaction result.
@@ -108,12 +110,20 @@ impl SimpleLeveledCompactionController {
             files_to_remove.extend(&snapshot.levels[upper_level - 1].1);
             snapshot.levels[upper_level - 1].1.clear();
         } else {
-            assert_eq!(
-                _task.upper_level_sst_ids, snapshot.l0_sstables,
-                "sst mismatched"
-            );
-            files_to_remove.extend(&snapshot.l0_sstables);
-            snapshot.l0_sstables.clear();
+            files_to_remove.extend(&_task.upper_level_sst_ids);
+            let mut l0_ssts_compacted = _task
+                .upper_level_sst_ids
+                .iter()
+                .copied()
+                .collect::<HashSet<_>>();
+            let new_l0_sstables = snapshot
+                .l0_sstables
+                .iter()
+                .copied()
+                .filter(|x| !l0_ssts_compacted.remove(x))
+                .collect::<Vec<_>>();
+            assert!(l0_ssts_compacted.is_empty());
+            snapshot.l0_sstables = new_l0_sstables;
         }
         assert_eq!(
             _task.lower_level_sst_ids,

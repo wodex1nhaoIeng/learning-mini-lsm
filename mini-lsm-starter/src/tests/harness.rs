@@ -258,6 +258,8 @@ pub fn compaction_bench(storage: Arc<MiniLsm>) {
         storage.inner.force_flush_next_imm_memtable().unwrap();
     }
 
+    // println!("233");
+
     let mut prev_snapshot = storage.inner.state.read().clone();
     while {
         std::thread::sleep(Duration::from_secs(1));
