@@ -344,36 +344,8 @@ impl LsmStorageInner {
             }
         }
 
-        // let mut iters = Vec::new();
-        // for i in 0..snap_shot.levels.len() {
-        //     let mut tables = Vec::with_capacity(snapshot.levels[i].1.len());
-
-        //     for table_id in snapshot.levels[i].1.iter() {
-        //         let table = snapshot.sstables[table_id].clone();
-        //         if Self::range_overlap(_lower, _upper, table.first_key(), table.last_key()) {
-        //             tables.push(table);
-        //         }
-        //     }
-
-        //     let iter = match _lower {
-        //         Bound::Included(key) => {
-        //             SstConcatIterator::create_and_seek_to_key(tables, KeySlice::from_slice(key))?
-        //         }
-        //         Bound::Excluded(key) => {
-        //             let mut iter = SstConcatIterator::create_and_seek_to_key(
-        //                 tables,
-        //                 KeySlice::from_slice(key),
-        //             )?;
-        //             if iter.is_valid() && iter.key() == KeySlice::from_slice(key) {
-        //                 iter.next()?;
-        //             }
-        //             iter
-        //         }
-        //         Bound::Unbounded => SstConcatIterator::create_and_seek_to_first(tables)?,
-        //     };
-        //     iters.push(Box::new(iter));
-        // }
         for i in 0..snap_shot.levels.len() {
+            let mut tables = Vec::new();
             for sstable_id in snap_shot.levels[i].1.iter() {
                 let sstable = snap_shot.sstables.get(sstable_id).unwrap();
 
@@ -385,16 +357,18 @@ impl LsmStorageInner {
                         continue;
                     }
                 }
-                let iter = SsTableIterator::create_and_seek_to_key(
-                    sstable.clone(),
-                    key::KeySlice::from_slice(_key),
-                )?;
-                if iter.is_valid() && iter.key() == key::KeySlice::from_slice(_key) {
-                    if iter.value().is_empty() {
-                        return Ok(None);
-                    }
-                    return Ok(Some(Bytes::copy_from_slice(iter.value())));
+
+                tables.push(sstable.clone());
+            }
+
+            let iter =
+                SstConcatIterator::create_and_seek_to_key(tables, key::KeySlice::from_slice(_key))?;
+
+            if iter.is_valid() && iter.key() == key::KeySlice::from_slice(_key) {
+                if iter.value().is_empty() {
+                    return Ok(None);
                 }
+                return Ok(Some(Bytes::copy_from_slice(iter.value())));
             }
         }
 
