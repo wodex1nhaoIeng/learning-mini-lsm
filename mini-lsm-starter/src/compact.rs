@@ -188,15 +188,13 @@ impl LsmStorageInner {
                         snap_shot.sstables.get(i).unwrap().clone(),
                     )?));
                 }
-                let mut l1_iters = Vec::new();
+                let mut l1_tables = Vec::new();
                 for i in l1_sstables.iter() {
-                    l1_iters.push(Box::new(SsTableIterator::create_and_seek_to_first(
-                        snap_shot.sstables.get(i).unwrap().clone(),
-                    )?));
+                    l1_tables.push(snap_shot.sstables.get(i).unwrap().clone());
                 }
                 iter = TwoMergeIterator::create(
                     MergeIterator::create(l0_iters),
-                    MergeIterator::create(l1_iters),
+                    SstConcatIterator::create_and_seek_to_first(l1_tables)?,
                 )?;
                 return self.generate_new_sstables(iter);
             }
@@ -274,13 +272,8 @@ impl LsmStorageInner {
         let Some(task) = task else {
             return Ok(());
         };
-        println!("running compaction task: {:?}", task);
         let sstables = self.compact(&task)?;
 
-        let snapshot = {
-            let state = self.state.read();
-            state.clone()
-        };
         // println!("233 {:?}", snapshot.l0_sstables.len());
         let files_added = sstables.len();
         let output = sstables.iter().map(|x| x.sst_id()).collect::<Vec<_>>();
@@ -314,7 +307,6 @@ impl LsmStorageInner {
             std::fs::remove_file(self.path_of_sst(sst.sst_id()))?;
         }
         Ok(())
-        // unimplemented!()
     }
 
     pub(crate) fn spawn_compaction_thread(
