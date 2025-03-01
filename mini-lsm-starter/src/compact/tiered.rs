@@ -93,8 +93,18 @@ impl TieredCompactionController {
 
             previous_size += this_tier_size;
         }
+        let mut tier = Vec::new();
+        for i in 0.._snapshot.levels.len().min(max_width_merge) {
+            tier.push(_snapshot.levels[i].clone());
+        }
+
+        Some(
+            TieredCompactionTask {
+                tiers: tier,
+                bottom_tier_included: _snapshot.levels.len() <= max_width_merge,
+            }
+        )
         // unimplemented!()
-        None
     }
 
     pub fn apply_compaction_result(

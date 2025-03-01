@@ -25,6 +25,7 @@ use std::time::Duration;
 
 use anyhow::{Ok, Result};
 pub use leveled::{LeveledCompactionController, LeveledCompactionOptions, LeveledCompactionTask};
+use nom::character::complete::tab;
 use serde::{Deserialize, Serialize};
 pub use simple_leveled::{
     SimpleLeveledCompactionController, SimpleLeveledCompactionOptions, SimpleLeveledCompactionTask,
@@ -213,6 +214,19 @@ impl LsmStorageInner {
                 }
                 let lower_iter = SstConcatIterator::create_and_seek_to_first(lower_ssts)?;
                 iter = TwoMergeIterator::create(upper_iter, lower_iter)?;
+                return self.generate_new_sstables(iter);
+            }
+            CompactionTask::Tiered(task) => {
+                let iter;
+                let mut tiers = Vec::new();
+                for tier in task.tiers.iter() {
+                    let mut tables = Vec::new();
+                    for id in tier.1.iter() {
+                        tables.push(snap_shot.sstables.get(id).unwrap().clone());
+                    }
+                    tiers.push(Box::new(SstConcatIterator::create_and_seek_to_first(tables)?));
+                }
+                iter = MergeIterator::create(tiers);
                 return self.generate_new_sstables(iter);
             }
             _ => {
