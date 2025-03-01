@@ -224,7 +224,9 @@ impl LsmStorageInner {
                     for id in tier.1.iter() {
                         tables.push(snap_shot.sstables.get(id).unwrap().clone());
                     }
-                    tiers.push(Box::new(SstConcatIterator::create_and_seek_to_first(tables)?));
+                    tiers.push(Box::new(SstConcatIterator::create_and_seek_to_first(
+                        tables,
+                    )?));
                 }
                 iter = MergeIterator::create(tiers);
                 return self.generate_new_sstables(iter);

@@ -56,38 +56,36 @@ impl TieredCompactionController {
         }
         println!("{:?}", self.options);
         if previous_size as f64 / _snapshot.levels.last().unwrap().1.len() as f64
-            >= self.options.max_size_amplification_percent as f64 * 0.01 {
-            return Some(
-                TieredCompactionTask {
-                    tiers: _snapshot.levels.clone(),
-                    bottom_tier_included: true,
-                }
-            );
+            >= self.options.max_size_amplification_percent as f64 * 0.01
+        {
+            return Some(TieredCompactionTask {
+                tiers: _snapshot.levels.clone(),
+                bottom_tier_included: true,
+            });
         }
 
         previous_size = 0;
         let mut max_width_merge = 2147483647;
         if let Some(x) = self.options.max_merge_width {
             max_width_merge = x;
-        } 
+        }
 
         for i in 0.._snapshot.levels.len() {
-            let this_tier_size = _snapshot.levels[i].1.len();    
+            let this_tier_size = _snapshot.levels[i].1.len();
 
-            if (this_tier_size as f64 / previous_size as f64) > 
-                (100.0 + self.options.size_ratio as f64) / 100.0 {
+            if (this_tier_size as f64 / previous_size as f64)
+                > (100.0 + self.options.size_ratio as f64) / 100.0
+            {
                 println!("this_tier_size: {:?}, {:?}", this_tier_size, previous_size);
                 if i >= self.options.min_merge_width && i < max_width_merge {
                     let mut tiers = Vec::new();
                     for j in 0..i {
                         tiers.push(_snapshot.levels[j].clone());
                     }
-                    return Some(
-                        TieredCompactionTask {
-                            tiers: tiers,
-                            bottom_tier_included: i == _snapshot.levels.len() - 1,
-                        }
-                    );
+                    return Some(TieredCompactionTask {
+                        tiers: tiers,
+                        bottom_tier_included: i == _snapshot.levels.len() - 1,
+                    });
                 }
             }
 
@@ -98,12 +96,10 @@ impl TieredCompactionController {
             tier.push(_snapshot.levels[i].clone());
         }
 
-        Some(
-            TieredCompactionTask {
-                tiers: tier,
-                bottom_tier_included: _snapshot.levels.len() <= max_width_merge,
-            }
-        )
+        Some(TieredCompactionTask {
+            tiers: tier,
+            bottom_tier_included: _snapshot.levels.len() <= max_width_merge,
+        })
         // unimplemented!()
     }
 
@@ -125,8 +121,7 @@ impl TieredCompactionController {
         for i in snapshot.levels {
             if need_to_remove_tier.remove(&i.0) {
                 files_to_remove.extend(i.1.clone());
-            }
-            else {
+            } else {
                 levels.push(i.clone());
             }
             if need_to_remove_tier.is_empty() && flag == false {
