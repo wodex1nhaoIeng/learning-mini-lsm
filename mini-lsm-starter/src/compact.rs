@@ -37,6 +37,7 @@ use crate::iterators::two_merge_iterator::TwoMergeIterator;
 use crate::iterators::StorageIterator;
 use crate::key::KeySlice;
 use crate::lsm_storage::{LsmStorageInner, LsmStorageState};
+use crate::manifest::ManifestRecord;
 use crate::table::SsTableIterator;
 use crate::table::{SsTable, SsTableBuilder};
 
@@ -293,6 +294,8 @@ impl LsmStorageInner {
         for sst in l0_sstables.iter().chain(l1_sstables.iter()) {
             std::fs::remove_file(self.path_of_sst(*sst))?;
         }
+
+        self.sync_dir()?;
         Ok(())
     }
 
@@ -308,19 +311,19 @@ impl LsmStorageInner {
             return Ok(());
         };
         let sstables = self.compact(&task)?;
-
+        let mut new_sst_talbe_ids = Vec::new();
         {
             let _state_lock = self.state_lock.lock();
             let mut state = self.state.write();
             let mut snapshot = state.as_ref().clone();
             for i in sstables.iter() {
+                new_sst_talbe_ids.push(i.sst_id());
                 let result = snapshot.sstables.insert(i.sst_id(), i.clone());
                 assert!(result.is_none());
             }
             *state = Arc::new(snapshot);
         }
 
-        // println!("233 {:?}", snapshot.l0_sstables.len());
         let files_added = sstables.len();
         let output = sstables.iter().map(|x| x.sst_id()).collect::<Vec<_>>();
         let ssts_to_remove = {
@@ -336,6 +339,13 @@ impl LsmStorageInner {
             }
             let mut state = self.state.write();
             *state = Arc::new(snapshot);
+            drop(state);
+
+            self.sync_dir()?;
+            self.manifest.as_ref().unwrap().add_record(
+                &_state_lock,
+                ManifestRecord::Compaction(task, new_sst_talbe_ids),
+            )?;
             ssts_to_remove
         };
         println!(
@@ -346,6 +356,8 @@ impl LsmStorageInner {
         for sst in ssts_to_remove {
             std::fs::remove_file(self.path_of_sst(sst.sst_id()))?;
         }
+
+        self.sync_dir()?;
         Ok(())
     }
 

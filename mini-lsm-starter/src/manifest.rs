@@ -20,8 +20,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{Ok, Result};
-use bytes::Buf;
+use anyhow::{Context, Ok, Result};
 use parking_lot::{Mutex, MutexGuard};
 use serde::{Deserialize, Serialize};
 
@@ -40,29 +39,24 @@ pub enum ManifestRecord {
 
 impl Manifest {
     pub fn create(_path: impl AsRef<Path>) -> Result<Self> {
-        Ok(
-            Self{
-                file: Arc::new(Mutex::new(
-                    OpenOptions::new()
-                        .read(true)
-                        .create_new(true)
-                        .write(true)
-                        .open(_path)?
-                ))
-            }
-        )
-        
+        Ok(Self {
+            file: Arc::new(Mutex::new(
+                OpenOptions::new()
+                    .read(true)
+                    .create_new(true)
+                    .write(true)
+                    .open(_path)
+                    .context("Fail to open Manifest path")?,
+            )),
+        })
     }
 
     pub fn recover(_path: impl AsRef<Path>) -> Result<(Self, Vec<ManifestRecord>)> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .append(true)
-            .open(_path)?;
+        let mut file = OpenOptions::new().read(true).append(true).open(_path)?;
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
         let mut records = Vec::new();
-        
+
         let mut stream = serde_json::Deserializer::from_slice(&buf).into_iter::<ManifestRecord>();
         while let Some(record) = stream.next() {
             records.push(record?);

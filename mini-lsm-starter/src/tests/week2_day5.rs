@@ -151,6 +151,8 @@ fn test_integration(compaction_options: CompactionOptions) {
         LsmStorageOptions::default_for_week2_test(compaction_options.clone()),
     )
     .unwrap();
+
+    storage.dump_structure();
     assert_eq!(&storage.get(b"0").unwrap().unwrap()[..], b"v20".as_slice());
     assert_eq!(&storage.get(b"1").unwrap().unwrap()[..], b"v20".as_slice());
     assert_eq!(storage.get(b"2").unwrap(), None);
