@@ -74,15 +74,13 @@ impl MemTable {
 
     /// Create a memtable from WAL
     pub fn recover_from_wal(_id: usize, _path: impl AsRef<Path>) -> Result<Self> {
-        let mut map = SkipMap::new();
-        Ok(
-            Self {
-                wal: Some(Wal::recover(_path, &map)?),
-                id: _id,
-                approximate_size: Arc::new(AtomicUsize::new(0)),
-                map: Arc::new(map),
-            }
-        )
+        let map = SkipMap::new();
+        Ok(Self {
+            wal: Some(Wal::recover(_path, &map)?),
+            id: _id,
+            approximate_size: Arc::new(AtomicUsize::new(0)),
+            map: Arc::new(map),
+        })
     }
 
     pub fn for_testing_put_slice(&self, key: &[u8], value: &[u8]) -> Result<()> {

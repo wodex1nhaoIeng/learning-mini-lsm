@@ -16,15 +16,15 @@
 #![allow(unused_variables)] // TODO(you): remove this lint after implementing this mod
 #![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
 
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::Path;
-use std::sync::Arc;
-use bytes::{Buf, BufMut};
 use anyhow::{Context, Result};
 use bytes::Bytes;
+use bytes::{Buf, BufMut};
 use crossbeam_skiplist::SkipMap;
 use parking_lot::Mutex;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Read, Write};
+use std::path::Path;
+use std::sync::Arc;
 
 pub struct Wal {
     file: Arc<Mutex<BufWriter<File>>>,
@@ -32,23 +32,21 @@ pub struct Wal {
 
 impl Wal {
     pub fn create(_path: impl AsRef<Path>) -> Result<Self> {
-        Ok(
-            Wal {
-                file: Arc::new(Mutex::new(BufWriter::new(
-                    OpenOptions::new()
-                        .read(true)
-                        .create(true)
-                        .write(true)
-                        .open(_path.as_ref())
-                        .context("Failed to create WAL file")?,
-                ))),
-            }
-        )
+        Ok(Wal {
+            file: Arc::new(Mutex::new(BufWriter::new(
+                OpenOptions::new()
+                    .read(true)
+                    .create(true)
+                    .write(true)
+                    .open(_path.as_ref())
+                    .context("Failed to create WAL file")?,
+            ))),
+        })
     }
 
     pub fn recover(_path: impl AsRef<Path>, _skiplist: &SkipMap<Bytes, Bytes>) -> Result<Self> {
         let mut file = OpenOptions::new().read(true).open(_path.as_ref())?;
-        let mut buf= Vec::new();
+        let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
         let mut file_as_u8 = buf.as_slice();
         while file_as_u8.len() > 0 {
@@ -61,9 +59,7 @@ impl Wal {
             _skiplist.insert(key, value);
         }
         Ok(Wal {
-            file: Arc::new(Mutex::new(BufWriter::new(
-                file
-            ))),
+            file: Arc::new(Mutex::new(BufWriter::new(file))),
         })
     }
 
@@ -85,7 +81,7 @@ impl Wal {
 
     pub fn sync(&self) -> Result<()> {
         let mut file = self.file.lock();
-        
+
         file.flush()?;
         file.get_mut().sync_all()?;
         Ok(())

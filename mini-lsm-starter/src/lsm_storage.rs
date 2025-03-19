@@ -15,13 +15,13 @@
 #![allow(unused_variables)] // TODO(you): remove this lint after implementing this mod
 #![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
 
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fs::File;
 use std::ops::Bound;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::collections::HashSet;
 
 use anyhow::{Context, Ok, Result};
 use bytes::Bytes;
@@ -197,6 +197,12 @@ impl MiniLsm {
                 .map_err(|e| anyhow::anyhow!("{:?}", e))?;
         }
 
+        if self.inner.options.enable_wal {
+            self.sync()?;
+            self.inner.sync_dir()?;
+            return Ok(());
+        }
+
         if !self.inner.state.read().memtable.is_empty() {
             let new_memtable = Arc::new(MemTable::create(self.inner.next_sst_id()));
             let mut state = self.inner.state.write();
@@ -323,18 +329,16 @@ impl LsmStorageInner {
         let manifest_path = path.join("MANIFEST");
         if !manifest_path.exists() {
             if options.enable_wal {
-                state.memtable = Arc::new(
-                    MemTable::create_with_wal(
-                        state.memtable.id(),
-                        &Self::path_of_wal_static(path, state.memtable.id())
-                    )?
-                );
+                state.memtable = Arc::new(MemTable::create_with_wal(
+                    state.memtable.id(),
+                    &Self::path_of_wal_static(path, state.memtable.id()),
+                )?);
             }
             manifest =
                 Manifest::create(&manifest_path).context("Failed to create manifest file")?;
             manifest.add_record_when_init(ManifestRecord::NewMemtable(state.memtable.id()))?;
         } else {
-            let mut memtables = HashSet::new();
+            let mut memtables = BTreeSet::new();
             let (m, records) = Manifest::recover(manifest_path)?;
             for record in records {
                 match record {
@@ -380,9 +384,41 @@ impl LsmStorageInner {
                 state.sstables.insert(table_id, Arc::new(sst));
             }
 
-            next_sst_id += 1;
-            state.memtable = Arc::new(MemTable::create(next_sst_id));
+            if let CompactionController::Leveled(_) = &compaction_controller {
+                for (_id, ssts) in &mut state.levels {
+                    ssts.sort_by(|x, y| {
+                        state
+                            .sstables
+                            .get(x)
+                            .unwrap()
+                            .first_key()
+                            .cmp(state.sstables.get(y).unwrap().first_key())
+                    })
+                }
+            }
 
+            next_sst_id += 1;
+
+            if options.enable_wal {
+                for memtable_id in memtables {
+                    let memtable = MemTable::recover_from_wal(
+                        memtable_id,
+                        &Self::path_of_wal_static(path, memtable_id),
+                    )?;
+                    if !memtable.is_empty() {
+                        state.imm_memtables.insert(0, Arc::new(memtable));
+                    }
+                }
+                state.memtable = Arc::new(MemTable::create_with_wal(
+                    next_sst_id,
+                    &Self::path_of_wal_static(path, next_sst_id),
+                )?);
+            } else {
+                state.memtable = Arc::new(MemTable::create(next_sst_id));
+            }
+
+            m.add_record_when_init(ManifestRecord::NewMemtable(state.memtable.id()))?;
+            // next_sst_id += 1;
             manifest = m;
         }
 
@@ -405,7 +441,7 @@ impl LsmStorageInner {
     }
 
     pub fn sync(&self) -> Result<()> {
-        unimplemented!()
+        self.state.read().memtable.sync_wal()
     }
 
     pub fn add_compaction_filter(&self, compaction_filter: CompactionFilter) {
@@ -547,13 +583,14 @@ impl LsmStorageInner {
         let mut state = self.state.write();
         let mut snapshot = state.as_ref().clone();
         let old_memtable = std::mem::replace(&mut snapshot.memtable, memtable);
+        old_memtable.sync_wal()?;
         snapshot.imm_memtables.insert(0, old_memtable);
         *state = Arc::new(snapshot);
 
-        self.manifest.as_ref().unwrap().add_record(
-            &_state_lock_observer, 
-            ManifestRecord::NewMemtable(id)
-        )?;
+        self.manifest
+            .as_ref()
+            .unwrap()
+            .add_record(&_state_lock_observer, ManifestRecord::NewMemtable(id))?;
         self.sync_dir()?;
         Ok(())
     }
@@ -594,12 +631,11 @@ impl LsmStorageInner {
         if self.options.enable_wal {
             std::fs::remove_file(&self.path_of_wal(sst_id)).context("Failed to remove WAL file")?;
         }
-        
+
         self.manifest
             .as_ref()
             .unwrap()
             .add_record(&lock, ManifestRecord::Flush(sst_id))?;
-
 
         self.sync_dir()?;
 
