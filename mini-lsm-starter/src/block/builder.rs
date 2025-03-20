@@ -74,7 +74,7 @@ impl BlockBuilder {
         } else {
             self.first_key = KeyVec::from_vec(key.into_inner().to_vec());
             self.offsets.push(self.data.len() as u16);
-            self.data.put_u16(0 as u16);
+            self.data.put_u16(0_u16);
             self.data.put_u16((key.len()) as u16);
             self.data.put(key.raw_ref());
             self.data.put_u16(value.len() as u16);

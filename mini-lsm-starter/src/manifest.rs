@@ -57,8 +57,8 @@ impl Manifest {
         file.read_to_end(&mut buf)?;
         let mut records = Vec::new();
 
-        let mut stream = serde_json::Deserializer::from_slice(&buf).into_iter::<ManifestRecord>();
-        while let Some(record) = stream.next() {
+        let stream = serde_json::Deserializer::from_slice(&buf).into_iter::<ManifestRecord>();
+        for record in stream {
             records.push(record?);
         }
         Ok((

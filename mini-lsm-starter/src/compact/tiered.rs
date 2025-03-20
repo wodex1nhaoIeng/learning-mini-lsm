@@ -83,7 +83,7 @@ impl TieredCompactionController {
                         tiers.push(_snapshot.levels[j].clone());
                     }
                     return Some(TieredCompactionTask {
-                        tiers: tiers,
+                        tiers,
                         bottom_tier_included: i == _snapshot.levels.len() - 1,
                     });
                 }
@@ -124,7 +124,7 @@ impl TieredCompactionController {
             } else {
                 levels.push(i.clone());
             }
-            if need_to_remove_tier.is_empty() && flag == false {
+            if need_to_remove_tier.is_empty() && !flag {
                 flag = true;
                 levels.push((_output[0], _output.to_vec()));
             }

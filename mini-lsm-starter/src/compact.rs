@@ -203,7 +203,7 @@ impl LsmStorageInner {
                     MergeIterator::create(l0_iters),
                     SstConcatIterator::create_and_seek_to_first(l1_tables)?,
                 )?;
-                return self.generate_new_sstables(iter, true);
+                self.generate_new_sstables(iter, true)
             }
             CompactionTask::Simple(task) => {
                 let iter;
@@ -220,7 +220,7 @@ impl LsmStorageInner {
                 }
                 let lower_iter = SstConcatIterator::create_and_seek_to_first(lower_ssts)?;
                 iter = TwoMergeIterator::create(upper_iter, lower_iter)?;
-                return self.generate_new_sstables(iter, task.is_lower_level_bottom_level);
+                self.generate_new_sstables(iter, task.is_lower_level_bottom_level)
             }
             CompactionTask::Tiered(task) => {
                 let iter;
@@ -235,7 +235,7 @@ impl LsmStorageInner {
                     )?));
                 }
                 iter = MergeIterator::create(tiers);
-                return self.generate_new_sstables(iter, task.bottom_tier_included);
+                self.generate_new_sstables(iter, task.bottom_tier_included)
             }
             CompactionTask::Leveled(task) => {
                 let iter;
@@ -252,7 +252,7 @@ impl LsmStorageInner {
                 }
                 let lower_iter = SstConcatIterator::create_and_seek_to_first(lower_ssts)?;
                 iter = TwoMergeIterator::create(upper_iter, lower_iter)?;
-                return self.generate_new_sstables(iter, task.is_lower_level_bottom_level);
+                self.generate_new_sstables(iter, task.is_lower_level_bottom_level)
             }
         }
     }

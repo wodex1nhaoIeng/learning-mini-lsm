@@ -40,7 +40,7 @@ impl SstConcatIterator {
             iter = Self {
                 current: None,
                 next_sst_idx: 0,
-                sstables: sstables,
+                sstables,
             };
             return Ok(iter);
         }
@@ -49,7 +49,7 @@ impl SstConcatIterator {
                 sstables[0].clone(),
             )?),
             next_sst_idx: 1,
-            sstables: sstables,
+            sstables,
         };
         Ok(iter)
     }
@@ -60,7 +60,7 @@ impl SstConcatIterator {
             iter = Self {
                 current: None,
                 next_sst_idx: 0,
-                sstables: sstables,
+                sstables,
             };
             return Ok(iter);
         }
@@ -80,15 +80,13 @@ impl SstConcatIterator {
                 iter = Self {
                     current: None,
                     next_sst_idx: 0,
-                    sstables: sstables,
+                    sstables,
                 };
                 return Ok(iter);
             }
         }
-        if left > 0 {
-            if sstables[left - 1].last_key().raw_ref() >= key.raw_ref() {
-                left -= 1;
-            }
+        if left > 0 && sstables[left - 1].last_key().raw_ref() >= key.raw_ref() {
+            left -= 1;
         }
         let iter = Self {
             current: Some(SsTableIterator::create_and_seek_to_key(
@@ -96,7 +94,7 @@ impl SstConcatIterator {
                 key,
             )?),
             next_sst_idx: left + 1,
-            sstables: sstables,
+            sstables,
         };
         Ok(iter)
     }

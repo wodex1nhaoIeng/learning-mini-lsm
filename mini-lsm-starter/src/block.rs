@@ -60,7 +60,7 @@ impl Block {
             .collect();
         Self {
             data: data_slice.to_vec(),
-            offsets: offsets,
+            offsets,
         }
     }
 

@@ -331,7 +331,7 @@ impl LsmStorageInner {
             if options.enable_wal {
                 state.memtable = Arc::new(MemTable::create_with_wal(
                     state.memtable.id(),
-                    &Self::path_of_wal_static(path, state.memtable.id()),
+                    Self::path_of_wal_static(path, state.memtable.id()),
                 )?);
             }
             manifest =
@@ -372,7 +372,7 @@ impl LsmStorageInner {
             for table_id in state
                 .l0_sstables
                 .iter()
-                .chain(state.levels.iter().map(|(_, files)| files).flatten())
+                .chain(state.levels.iter().flat_map(|(_, files)| files))
             {
                 let table_id = *table_id;
                 let sst = SsTable::open(
@@ -403,7 +403,7 @@ impl LsmStorageInner {
                 for memtable_id in memtables {
                     let memtable = MemTable::recover_from_wal(
                         memtable_id,
-                        &Self::path_of_wal_static(path, memtable_id),
+                        Self::path_of_wal_static(path, memtable_id),
                     )?;
                     if !memtable.is_empty() {
                         state.imm_memtables.insert(0, Arc::new(memtable));
@@ -411,7 +411,7 @@ impl LsmStorageInner {
                 }
                 state.memtable = Arc::new(MemTable::create_with_wal(
                     next_sst_id,
-                    &Self::path_of_wal_static(path, next_sst_id),
+                    Self::path_of_wal_static(path, next_sst_id),
                 )?);
             } else {
                 state.memtable = Arc::new(MemTable::create(next_sst_id));
@@ -576,7 +576,7 @@ impl LsmStorageInner {
         let memtable;
         let id = self.next_sst_id();
         if self.options.enable_wal {
-            memtable = Arc::new(MemTable::create_with_wal(id, &self.path_of_wal(id))?);
+            memtable = Arc::new(MemTable::create_with_wal(id, self.path_of_wal(id))?);
         } else {
             memtable = Arc::new(MemTable::create(id));
         }
@@ -590,7 +590,7 @@ impl LsmStorageInner {
         self.manifest
             .as_ref()
             .unwrap()
-            .add_record(&_state_lock_observer, ManifestRecord::NewMemtable(id))?;
+            .add_record(_state_lock_observer, ManifestRecord::NewMemtable(id))?;
         self.sync_dir()?;
         Ok(())
     }
@@ -629,7 +629,7 @@ impl LsmStorageInner {
         };
 
         if self.options.enable_wal {
-            std::fs::remove_file(&self.path_of_wal(sst_id)).context("Failed to remove WAL file")?;
+            std::fs::remove_file(self.path_of_wal(sst_id)).context("Failed to remove WAL file")?;
         }
 
         self.manifest

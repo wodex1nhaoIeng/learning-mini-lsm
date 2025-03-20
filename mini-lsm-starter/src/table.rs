@@ -146,17 +146,17 @@ impl SsTable {
 
         let raw_bloom_offset = file.read(file_size - 4, 4)?;
         let bloom_offset = (&raw_bloom_offset[..]).get_u32() as u64;
-        let bloom_section_size = file_size - bloom_offset as u64 - 4;
+        let bloom_section_size = file_size - bloom_offset - 4;
 
         let raw_bloom_data = file.read(bloom_offset, bloom_section_size)?;
-        let bloom = Bloom::decode(&mut raw_bloom_data.as_slice())?;
+        let bloom = Bloom::decode(&raw_bloom_data.as_slice())?;
 
         let raw_meta_block_offset = file.read(bloom_offset - 4, 4)?;
         let meta_block_offset = (&raw_meta_block_offset[..]).get_u32() as u64;
-        let meta_section_size = bloom_offset - meta_block_offset as u64 - 4;
+        let meta_section_size = bloom_offset - meta_block_offset - 4;
 
         let raw_meta_data = file.read(meta_block_offset, meta_section_size)?;
-        let meta_data = BlockMeta::decode_block_meta(&mut raw_meta_data.as_slice());
+        let meta_data = BlockMeta::decode_block_meta(raw_meta_data.as_slice());
         Ok(SsTable {
             file,
             block_meta_offset: meta_block_offset as usize,
@@ -235,10 +235,8 @@ impl SsTable {
                 r = mid;
             }
         }
-        if l > 0 {
-            if self.block_meta[l - 1].last_key.as_key_slice() >= key {
-                l -= 1
-            }
+        if l > 0 && self.block_meta[l - 1].last_key.as_key_slice() >= key {
+            l -= 1
         }
         l
     }

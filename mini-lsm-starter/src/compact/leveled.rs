@@ -90,7 +90,7 @@ impl LeveledCompactionController {
         level_real_size.push(0); // 第0层大小不考虑，
         for i in 0..self.options.max_levels {
             let mut size = 0;
-            target_size.push(0 as usize);
+            target_size.push(0_usize);
             for table_id in _snapshot.levels[i].1.iter() {
                 size += _snapshot.sstables.get(table_id).unwrap().table_size();
             }

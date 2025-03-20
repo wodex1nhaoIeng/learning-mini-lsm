@@ -49,7 +49,7 @@ impl Wal {
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
         let mut file_as_u8 = buf.as_slice();
-        while file_as_u8.len() > 0 {
+        while !file_as_u8.is_empty() {
             let key_len = file_as_u8.get_u16() as usize;
             let key = Bytes::copy_from_slice(&file_as_u8[..key_len]);
             file_as_u8.advance(key_len);

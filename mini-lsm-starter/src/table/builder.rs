@@ -85,7 +85,7 @@ impl SsTableBuilder {
 
         self.finish_block();
 
-        if self.builder.add(key, value) == false {
+        if !self.builder.add(key, value) {
             panic!("Can not build another block!");
         }
         self.first_key.clear();
