@@ -149,7 +149,7 @@ impl SsTable {
         let bloom_section_size = file_size - bloom_offset - 4;
 
         let raw_bloom_data = file.read(bloom_offset, bloom_section_size)?;
-        let bloom = Bloom::decode(&raw_bloom_data.as_slice())?;
+        let bloom = Bloom::decode(raw_bloom_data.as_slice())?;
 
         let raw_meta_block_offset = file.read(bloom_offset - 4, 4)?;
         let meta_block_offset = (&raw_meta_block_offset[..]).get_u32() as u64;

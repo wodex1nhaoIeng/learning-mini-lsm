@@ -74,8 +74,7 @@ impl StorageIterator for LsmIterator {
     }
 
     fn key(&self) -> &[u8] {
-        let key: &[u8] = &self.inner.key().raw_ref();
-        key
+        self.inner.key().raw_ref()
     }
 
     fn value(&self) -> &[u8] {
