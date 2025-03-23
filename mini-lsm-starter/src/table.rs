@@ -23,7 +23,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 pub use builder::SsTableBuilder;
 use bytes::{Buf, BufMut};
 pub use iterator::SsTableIterator;
@@ -48,11 +48,9 @@ impl BlockMeta {
     /// Encode block meta to a buffer.
     /// You may add extra fields to the buffer,
     /// in order to help keep track of `first_key` when decoding from the same buffer in the future.
-    pub fn encode_block_meta(
-        block_meta: &[BlockMeta],
-        #[allow(clippy::ptr_arg)] // remove this allow after you finish
-        buf: &mut Vec<u8>,
-    ) {
+    pub fn encode_block_meta(block_meta: &[BlockMeta], buf: &mut Vec<u8>) {
+        let original_len = buf.len();
+        buf.put_u32(block_meta.len() as u32);
         for meta in block_meta {
             buf.put_u32(meta.offset as u32);
             buf.put_u16(meta.first_key.len() as u16);
@@ -60,12 +58,15 @@ impl BlockMeta {
             buf.put_u16(meta.last_key.len() as u16);
             buf.put_slice(meta.last_key.raw_ref());
         }
+        buf.put_u32(crc32fast::hash(&buf[original_len + 4..]));
     }
 
     /// Decode block meta from a buffer.
-    pub fn decode_block_meta(mut buf: impl Buf) -> Vec<BlockMeta> {
+    pub fn decode_block_meta(mut buf: &[u8]) -> Result<Vec<BlockMeta>> {
         let mut block_meta = Vec::new();
-        while buf.has_remaining() {
+        let num = buf.get_u32() as usize;
+        let checksum = crc32fast::hash(&buf[..buf.remaining() - 4]);
+        for i in 0..num {
             let offset = buf.get_u32() as usize;
             let first_key_len = buf.get_u16() as usize;
             let first_key = buf.copy_to_bytes(first_key_len);
@@ -77,7 +78,10 @@ impl BlockMeta {
                 last_key: KeyBytes::from_bytes(last_key),
             });
         }
-        block_meta
+        if buf.get_u32() != checksum {
+            bail!("Checksum mismatch when decoding block meta");
+        }
+        Ok(block_meta)
     }
 }
 
@@ -156,7 +160,7 @@ impl SsTable {
         let meta_section_size = bloom_offset - meta_block_offset - 4;
 
         let raw_meta_data = file.read(meta_block_offset, meta_section_size)?;
-        let meta_data = BlockMeta::decode_block_meta(raw_meta_data.as_slice());
+        let meta_data = BlockMeta::decode_block_meta(raw_meta_data.as_slice())?;
         Ok(SsTable {
             file,
             block_meta_offset: meta_block_offset as usize,
@@ -195,18 +199,22 @@ impl SsTable {
     /// Read a block from the disk.
     pub fn read_block(&self, block_idx: usize) -> Result<Arc<Block>> {
         let meta_data = &self.block_meta[block_idx];
-        // println!("block_idx = {}", block_idx);
-        // println!("meta_data = {:?}", self.block_meta.len());
+        let block_size: usize;
+        let raw_block_data: Vec<u8>;
         if block_idx >= self.block_meta.len() - 1 {
-            let block_size = self.block_meta_offset as u64 - meta_data.offset as u64;
-            let raw_block_data = self.file.read(meta_data.offset as u64, block_size)?;
-            Ok(Arc::new(Block::decode(raw_block_data.as_slice())))
+            block_size = self.block_meta_offset - meta_data.offset;
+            raw_block_data = self.file.read(meta_data.offset as u64, block_size as u64)?;
         } else {
             let next_meta_data = &self.block_meta[block_idx + 1];
-            let block_size = next_meta_data.offset - meta_data.offset;
-            let raw_block_data = self.file.read(meta_data.offset as u64, block_size as u64)?;
-            Ok(Arc::new(Block::decode(raw_block_data.as_slice())))
+            block_size = next_meta_data.offset - meta_data.offset;
+            raw_block_data = self.file.read(meta_data.offset as u64, block_size as u64)?;
         }
+        let block_data = &raw_block_data[..block_size - 4];
+        let check_sum = (&raw_block_data[block_size - 4..]).get_u32();
+        if check_sum != crc32fast::hash(block_data) {
+            bail!("Checksum mismatch when reading block");
+        }
+        Ok(Arc::new(Block::decode(block_data)))
     }
 
     /// Read a block from disk, with block cache. (Day 4)

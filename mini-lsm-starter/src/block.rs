@@ -47,10 +47,6 @@ impl Block {
     pub fn decode(data: &[u8]) -> Self {
         let entry_offsets_len: u16 = (&data[data.len() - U16_SIZE..]).get_u16();
 
-        // println!("data.len() = {}", data.len());
-        // println!("entry_offsets_len = {}", entry_offsets_len);
-        // panic!("Invalid data length");
-
         let data_slice = &data[..(data.len() - U16_SIZE - entry_offsets_len as usize * U16_SIZE)];
         let offsets_raw = &data
             [data.len() - U16_SIZE - entry_offsets_len as usize * U16_SIZE..data.len() - U16_SIZE];

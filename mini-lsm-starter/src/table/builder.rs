@@ -63,7 +63,10 @@ impl SsTableBuilder {
             first_key: KeyBytes::from_bytes(std::mem::take(&mut self.first_key).into()),
             last_key: KeyBytes::from_bytes(std::mem::take(&mut self.last_key).into()),
         });
-        self.data.extend(block.encode());
+        let encoded_block = block.encode();
+        let hash_result = crc32fast::hash(&encoded_block);
+        self.data.extend(encoded_block);
+        self.data.put_u32(hash_result);
     }
 
     /// Adds a key-value pair to SSTable.
