@@ -83,6 +83,10 @@ impl ReplHandler {
                     println!("{} not exist", key);
                 }
             }
+            Command::Put { key, value } => {
+                self.lsm.put(key.as_bytes(), value.as_bytes())?;
+                println!("{}={:?}", key, value);
+            }
             Command::Scan { begin, end } => match (begin, end) {
                 (None, None) => {
                     let mut iter = self
@@ -163,6 +167,10 @@ enum Command {
         begin: Option<String>,
         end: Option<String>,
     },
+    Put {
+        key: String,
+        value: String,
+    },
 
     Dump,
     Flush,
@@ -210,6 +218,13 @@ impl Command {
             )(i)
         };
 
+        let put = |i| {
+            map(
+                tuple((tag_no_case("put"), space1, string, space1, string)),
+                |(_, _, key, _, value)| Command::Put { key, value },
+            )(i)
+        };
+
         let get = |i| {
             map(
                 tuple((tag_no_case("get"), space1, string)),
@@ -235,6 +250,7 @@ impl Command {
             alt((
                 fill,
                 del,
+                put,
                 get,
                 scan,
                 map(tag_no_case("dump"), |_| Command::Dump),
