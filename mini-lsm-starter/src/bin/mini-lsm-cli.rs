@@ -40,13 +40,16 @@ enum CompactionStrategy {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, default_value = "lsm.db")]
+    #[arg(long, default_value = "lsm.db", help = "Path to the LSM database file")]
     path: PathBuf,
-    #[arg(long, default_value = "leveled")]
+    
+    #[arg(long, default_value = "leveled", help = "Compaction strategy to use (simple, leveled, tiered, none)")]
     compaction: CompactionStrategy,
-    #[arg(long)]
+    
+    #[arg(long, help = "Enable write-ahead logging for crash recovery")]
     enable_wal: bool,
-    #[arg(long)]
+    
+    #[arg(long, help = "Enable serializable isolation level for transactions")]
     serializable: bool,
 }
 
@@ -143,6 +146,18 @@ impl ReplHandler {
                 self.lsm.close()?;
                 std::process::exit(0);
             }
+            Command::Help => {
+                println!("Available commands:");
+                println!("  fill <begin> <end> - Fill keys from <begin> to <end>");
+                println!("  del <key> - Delete a key");
+                println!("  get <key> - Get a key");
+                println!("  put <key> <value> - Put a key-value pair");
+                println!("  scan [<begin>] [<end>] - Scan keys in the range");
+                println!("  dump - Dump the LSM structure");
+                println!("  flush - Flush the memtable to disk");
+                println!("  full_compaction - Force full compaction");
+                println!("  quit | close - Exit the CLI");
+            }
         };
 
         self.epoch += 1;
@@ -177,6 +192,7 @@ enum Command {
     FullCompaction,
     Quit,
     Close,
+    Help,
 }
 
 impl Command {
@@ -258,6 +274,7 @@ impl Command {
                 map(tag_no_case("full_compaction"), |_| Command::FullCompaction),
                 map(tag_no_case("quit"), |_| Command::Quit),
                 map(tag_no_case("close"), |_| Command::Close),
+                map(tag_no_case("help"), |_| Command::Help),
             ))(i)
         };
 
